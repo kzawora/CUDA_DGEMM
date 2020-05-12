@@ -20,6 +20,7 @@ cudaReturnValue cublasDgemmWrapper(
     double executionTime = -1.;
     cublasHandle_t handle;
     cublasStatus_t stat;
+    clock_t t;
 
     // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = cudaSetDevice(0);
@@ -74,7 +75,6 @@ cudaReturnValue cublasDgemmWrapper(
     }
 
     // start time measurement
-    clock_t t;
     t = clock();
 
     // execute cublasDgemm

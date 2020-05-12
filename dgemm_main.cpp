@@ -16,6 +16,12 @@ double doubleRand(double min, double max)
     return min + f * (max - min);
 }
 
+inline void cleanup(double* A, double* B, double* C_myKernel, double* C_cublas) {
+    free(A);
+    free(B);
+    free(C_myKernel);
+    free(C_cublas);
+}
 
 int syntheticTest(cublasOperation_t transa, cublasOperation_t transb, const int m, const int k, const int n, bool print_matrix = false, const int rand_max = 10) {
     srand(time(NULL));
@@ -38,13 +44,13 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb, const int 
     }
 
     int return_code = 0;
-
     // run cublasGemm
     cudaReturnValue cublasStatus = cublasDgemmWrapper(transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C_cublas, ldc);
     if (cublasStatus.status != cudaSuccess) {
         fprintf(stderr, "cuBlasDgemm failed!");
         return_code = 1;
-        goto Cleanup;
+        cleanup(A, B, C_myKernel, C_cublas);
+        return return_code;
     }
 
 
@@ -53,7 +59,8 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb, const int 
     if (myKernelStatus.status != cudaSuccess) {
         fprintf(stderr, "myKernel failed!");
         return_code = 1;
-        goto Cleanup;
+        cleanup(A, B, C_myKernel, C_cublas);
+        return return_code;
     }
 
     // cudaDeviceReset must be called before exiting in order for profiling and
@@ -62,7 +69,8 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb, const int 
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaDeviceReset failed!");
         return_code = 1;
-        goto Cleanup;
+        cleanup(A, B, C_myKernel, C_cublas);
+        return return_code;
     }
 
     // print results
@@ -87,12 +95,7 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb, const int 
     else
         printf("%d mismatch(es) found.\n", errorCounter);
 
-Cleanup:
-    free(A);
-    free(B);
-    free(C_myKernel);
-    free(C_cublas);
-
+    cleanup(A, B, C_myKernel, C_cublas);
     return return_code;
 }
 
@@ -177,5 +180,5 @@ int prettyTest() {
 }
 
 int main() {
-    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 2000, 2000, 2000);
+    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 1234, 2345, 1230);
 }
