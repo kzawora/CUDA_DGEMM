@@ -23,6 +23,11 @@ inline void cleanup(double* A, double* B, double* C_myKernel, double* C_cublas) 
     free(C_cublas);
 }
 
+template <class T>
+inline T max(T a, T b) {
+    return a > b ? a : b;
+}
+
 int syntheticTest(cublasOperation_t transa, cublasOperation_t transb,
     const int m, const int k, const int n,
     bool print_matrix = false, const int rand_max = 10) {
