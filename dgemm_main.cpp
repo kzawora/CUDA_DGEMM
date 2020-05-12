@@ -42,6 +42,12 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb, const int 
         C_cublas[i] = rand_val;
         C_myKernel[i] = rand_val;
     }
+    char transa_str[12] = "CUBLAS_OP_N";
+    if (transa != CUBLAS_OP_N) transa_str[10] = 'T';
+    char transb_str[12] = "CUBLAS_OP_N";
+    if (transb != CUBLAS_OP_N) transb_str[10] = 'T';
+
+    printf("TEST: M=%d, K=%d N=%d, transa=%s, transb=%s\n", m, k, n, transa_str, transb_str);
 
     int return_code = 0;
     // run cublasGemm
@@ -91,9 +97,9 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb, const int 
         }
     }
     if (errorCounter == 0)
-        printf("No mismatches found.\n");
+        printf("[PASSED] No mismatches found.\n\n");
     else
-        printf("%d mismatch(es) found.\n", errorCounter);
+        printf("[FAILED] %d mismatch(es) found.\n\n", errorCounter);
 
     cleanup(A, B, C_myKernel, C_cublas);
     return return_code;
@@ -180,5 +186,11 @@ int prettyTest() {
 }
 
 int main() {
+    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 16, 16, 16);
+    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 16, 32, 64);
+    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_N, 64, 256, 256);
+    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_N, 17, 257, 75);
+    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 1234, 2345, 1230);
     syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 1234, 2345, 1230);
+    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 2234, 2345, 2230);
 }

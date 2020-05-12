@@ -9,13 +9,13 @@ __global__ void myDgemmKernel_naive(
     const double beta,
     double* C, int ldc)
 {
-    int tid_x = blockIdx.x;
-    int tid_y = blockIdx.y;
-    int mat_c_idx = tid_x + tid_y * ldc;
+    int bid_x = blockIdx.x;
+    int bid_y = blockIdx.y;
+    int mat_c_idx = bid_x + bid_y * ldc;
     C[mat_c_idx] *= beta;
     for (int i = 0; i < k; i++) {
-        int mat_a_idx = transa == CUBLAS_OP_T ? tid_x * lda + i : tid_x + i * lda;
-        int mat_b_idx = transb == CUBLAS_OP_T ? tid_y + i * ldb : tid_y * ldb + i;
+        int mat_a_idx = transa == CUBLAS_OP_T ? bid_x * lda + i : bid_x + i * lda;
+        int mat_b_idx = transb == CUBLAS_OP_T ? bid_y + i * ldb : bid_y * ldb + i;
         C[mat_c_idx] += alpha * A[mat_a_idx] * B[mat_b_idx];
     }
 }
