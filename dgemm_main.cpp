@@ -4,7 +4,7 @@
 void printMatrixColMajor(const double* matrix, int width, int height) {
     for (int i = 0; i < width; i++) {
         for (int j = 0; j < height; j++) {
-            printf("%lf ", matrix[i + j * width]);
+            printf("%lf\t", matrix[i + j * width]);
         }
         printf("\n");
     }
