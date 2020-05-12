@@ -41,6 +41,10 @@ cudaReturnValue myDgemmHostCode(
     cublasHandle_t handle;
     cublasStatus_t stat;
 
+    dim3 numBlocks(m, n);
+    dim3 threadsPerBlock(1);
+    clock_t t;
+
     // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = cudaSetDevice(0);
     if (cudaStatus != cudaSuccess) {
@@ -93,10 +97,7 @@ cudaReturnValue myDgemmHostCode(
         goto Error;
     }
 
-    dim3 numBlocks(m, n);
-    dim3 threadsPerBlock(1);
     // start time measurement
-    clock_t t;
     t = clock();
     // Launch a kernel on the GPU with one thread for each element.
     myDgemmKernel_naive << <numBlocks, threadsPerBlock >> > (
