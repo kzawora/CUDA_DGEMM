@@ -23,13 +23,15 @@ inline void cleanup(double* A, double* B, double* C_myKernel, double* C_cublas) 
     free(C_cublas);
 }
 
-int syntheticTest(cublasOperation_t transa, cublasOperation_t transb, const int m, const int k, const int n, bool print_matrix = false, const int rand_max = 10) {
+int syntheticTest(cublasOperation_t transa, cublasOperation_t transb,
+    const int m, const int k, const int n,
+    bool print_matrix = false, const int rand_max = 10) {
     srand(time(NULL));
     const double alpha = rand() % rand_max;
     const double beta = rand() % rand_max;
-    const int lda = transa == CUBLAS_OP_N ? m : k;
-    const int ldb = transb == CUBLAS_OP_N ? k : n;
-    const int ldc = m;
+    const int lda = max(1, transa == CUBLAS_OP_N ? m : k);
+    const int ldb = max(1, transb == CUBLAS_OP_N ? k : n);
+    const int ldc = max(1, m);
 
     double* A = (double*)malloc(m * k * sizeof(double));
     for (int i = 0; i < m * k; i++) A[i] = doubleRand(-rand_max, rand_max);
@@ -111,7 +113,7 @@ int prettyTest() {
     const int m = 2;
     const int n = 4;
     const int k = 3;
-    const double alpha = 1.;
+    const double alpha = 0.5;
     const double beta = 2.;
     const int lda = transa == CUBLAS_OP_N ? m : k;
     const int ldb = transb == CUBLAS_OP_N ? k : n;
@@ -128,14 +130,16 @@ int prettyTest() {
         9.,10.,11.,12.
     };
 
-    double C_myKernel[m * n] = {
-        1.,1.,1., 1.,
-        1.,1.,1., 1.
-    };
     double C_cublas[m * n] = {
         1.,1.,1., 1.,
         1.,1.,1., 1.
     };
+
+    double C_myKernel[m * n] = {
+        1.,1.,1., 1.,
+        1.,1.,1., 1.
+    };
+
 
     // run cublasGemm
     cudaReturnValue cublasStatus = cublasDgemmWrapper(transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C_cublas, ldc);

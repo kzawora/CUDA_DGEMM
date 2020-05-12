@@ -12,12 +12,13 @@ __global__ void myDgemmKernel_naive(
     int bid_x = blockIdx.x;
     int bid_y = blockIdx.y;
     int mat_c_idx = bid_x + bid_y * ldc;
-    C[mat_c_idx] *= beta;
+    double result = C[mat_c_idx] * beta;
     for (int i = 0; i < k; i++) {
         int mat_a_idx = transa == CUBLAS_OP_T ? bid_x * lda + i : bid_x + i * lda;
         int mat_b_idx = transb == CUBLAS_OP_T ? bid_y + i * ldb : bid_y * ldb + i;
-        C[mat_c_idx] += alpha * A[mat_a_idx] * B[mat_b_idx];
+        result += alpha * A[mat_a_idx] * B[mat_b_idx];
     }
+    C[mat_c_idx] = result;
 }
 
 cudaReturnValue myDgemmHostCode(
