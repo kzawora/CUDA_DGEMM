@@ -19,7 +19,16 @@ extern cudaReturnValue cublasDgemmWrapper(
     const double* beta,
     double* C, int ldc);
 
-extern cudaReturnValue myDgemmHostCode(
+extern cudaReturnValue myDgemmHostCodeNaive(
+    cublasOperation_t transa, cublasOperation_t transb,
+    int m, int n, int k,
+    const double* alpha,
+    const double* A, int lda,
+    const double* B, int ldb,
+    const double* beta,
+    double* C, int ldc);
+
+extern cudaReturnValue myDgemmHostCodeOpt(
     cublasOperation_t transa, cublasOperation_t transb,
     int m, int n, int k,
     const double* alpha,

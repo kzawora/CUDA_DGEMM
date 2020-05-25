@@ -21,7 +21,7 @@ __global__ void myDgemmKernel_naive(
     C[mat_c_idx] = result;
 }
 
-cudaReturnValue myDgemmHostCode(
+cudaReturnValue myDgemmHostCodeNaive(
     cublasOperation_t transa, cublasOperation_t transb,
     int m, int n, int k,
     const double* alpha,
@@ -101,7 +101,7 @@ cudaReturnValue myDgemmHostCode(
     // start time measurement
     t = clock();
     // Launch a kernel on the GPU with one thread for each element.
-    myDgemmKernel_naive << <numBlocks, threadsPerBlock >> > (
+    myDgemmKernel_naive<<<numBlocks, threadsPerBlock>>> (
         transa, transb,
         m, n, k,
         *alpha,

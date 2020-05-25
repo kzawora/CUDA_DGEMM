@@ -43,12 +43,16 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb,
     double* B = (double*)malloc(n * k * sizeof(double));
     for (int i = 0; i < n * k; i++) B[i] = doubleRand(-rand_max, rand_max);
     double* C_cublas = (double*)malloc(m * n * sizeof(double));
-    double* C_myKernel = (double*)malloc(m * n * sizeof(double));
+    double* C_myKernelNaive = (double*)malloc(m * n * sizeof(double));
+    double* C_myKernelOpt = (double*)malloc(m * n * sizeof(double));
+
     for (int i = 0; i < n * m; i++) {
         double rand_val = doubleRand(-rand_max, rand_max);
         C_cublas[i] = rand_val;
-        C_myKernel[i] = rand_val;
+        C_myKernelNaive[i] = rand_val;
+        C_myKernelOpt[i] = rand_val;
     }
+
     char transa_str[12] = "CUBLAS_OP_N";
     if (transa != CUBLAS_OP_N) transa_str[10] = 'T';
     char transb_str[12] = "CUBLAS_OP_N";
@@ -62,17 +66,26 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb,
     if (cublasStatus.status != cudaSuccess) {
         fprintf(stderr, "cuBlasDgemm failed!");
         return_code = 1;
-        cleanup(A, B, C_myKernel, C_cublas);
+        cleanup(A, B, C_myKernelNaive, C_cublas);
         return return_code;
     }
 
 
     // run myKernel
-    cudaReturnValue myKernelStatus = myDgemmHostCode(transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C_myKernel, ldc);
-    if (myKernelStatus.status != cudaSuccess) {
+    cudaReturnValue myKernelStatusNaive = myDgemmHostCodeNaive(transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C_myKernelNaive, ldc);
+    if (myKernelStatusNaive.status != cudaSuccess) {
         fprintf(stderr, "myKernel failed!");
         return_code = 1;
-        cleanup(A, B, C_myKernel, C_cublas);
+        cleanup(A, B, C_myKernelNaive, C_cublas);
+        return return_code;
+    }
+
+    // run myKernel
+    cudaReturnValue myKernelStatusOpt = myDgemmHostCodeOpt(transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C_myKernelOpt, ldc);
+    if (myKernelStatusOpt.status != cudaSuccess) {
+        fprintf(stderr, "myKernel failed!");
+        return_code = 1;
+        cleanup(A, B, C_myKernelNaive, C_cublas);
         return return_code;
     }
 
@@ -82,24 +95,26 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb,
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaDeviceReset failed!");
         return_code = 1;
-        cleanup(A, B, C_myKernel, C_cublas);
+        cleanup(A, B, C_myKernelNaive, C_cublas);
         return return_code;
     }
 
     // print results
     printf("cublasDgemm time %lfs\n", cublasStatus.executionTime);
     if (print_matrix) printMatrixColMajor(C_cublas, ldc, n);
-    printf("myDgemm time %lfs\n", myKernelStatus.executionTime);
-    if (print_matrix) printMatrixColMajor(C_myKernel, ldc, n);
+    printf("myDgemmNaive time %lfs\n", myKernelStatusNaive.executionTime);
+    if (print_matrix) printMatrixColMajor(C_myKernelNaive, ldc, n);
+    printf("myDgemmOpt time %lfs\n", myKernelStatusOpt.executionTime);
+    if (print_matrix) printMatrixColMajor(C_myKernelOpt, ldc, n);
 
     // compare results
     int errorCounter = 0;
     double epsilon = 1e-9;
     for (int i = 0; i < ldc; i++) {
         for (int j = 0; j < n; j++) {
-            if (fabs(C_myKernel[i + j * ldc] - C_cublas[i + j * ldc]) > epsilon) {
+            if (fabs(C_myKernelOpt[i + j * ldc] - C_cublas[i + j * ldc]) > epsilon) {
                 errorCounter++;
-                printf("Value mismatch at (%d,%d):\n  Expected: %lf\n  Actual: %lf\n", i, j, C_cublas[i + j * ldc], C_myKernel[i + j * ldc]);
+                printf("Value mismatch at (%d,%d):\n  Expected: %lf\n  Actual: %lf\n", i, j, C_cublas[i + j * ldc], C_myKernelOpt[i + j * ldc]);
             }
         }
     }
@@ -108,7 +123,8 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb,
     else
         printf("[FAILED] %d mismatch(es) found.\n\n", errorCounter);
 
-    cleanup(A, B, C_myKernel, C_cublas);
+    cleanup(A, B, C_myKernelNaive, C_cublas);
+    free(C_myKernelOpt);
     return return_code;
 }
 
@@ -155,7 +171,7 @@ int prettyTest() {
 
 
     // run myKernel
-    cudaReturnValue myKernelStatus = myDgemmHostCode(transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C_myKernel, ldc);
+    cudaReturnValue myKernelStatus = myDgemmHostCodeNaive(transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C_myKernel, ldc);
     if (myKernelStatus.status != cudaSuccess) {
         fprintf(stderr, "myKernel failed!");
         return 1;
@@ -195,11 +211,11 @@ int prettyTest() {
 }
 
 int main() {
-    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 16, 16, 16);
-    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 16, 32, 64);
-    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_N, 64, 256, 256);
-    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_N, 17, 257, 75);
-    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 1234, 2345, 1230);
-    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 1234, 2345, 1230);
-    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 2234, 2345, 2230);
+///    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 16, 16, 16);
+///    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 16, 32, 64);
+///    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_N, 64, 256, 256);
+///    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_N, 17, 257, 75);
+///    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 1234, 2345, 1230);
+    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_N, 2048, 2048, 2048);
+//    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 1024, 1024, 1024);
 }
