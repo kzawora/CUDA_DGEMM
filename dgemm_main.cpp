@@ -109,7 +109,7 @@ int syntheticTest(cublasOperation_t transa, cublasOperation_t transb,
 
     // compare results
     int errorCounter = 0;
-    double epsilon = 1e-9;
+    double epsilon = 1e-4;
     for (int i = 0; i < ldc; i++) {
         for (int j = 0; j < n; j++) {
             if (fabs(C_myKernelOpt[i + j * ldc] - C_cublas[i + j * ldc]) > epsilon) {
@@ -211,11 +211,9 @@ int prettyTest() {
 }
 
 int main() {
-///    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 16, 16, 16);
-///    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 16, 32, 64);
-///    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_N, 64, 256, 256);
-///    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_N, 17, 257, 75);
-///    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 1234, 2345, 1230);
-    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_N, 2048, 2048, 2048);
-//    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 1024, 1024, 1024);
+    syntheticTest(CUBLAS_OP_T, CUBLAS_OP_T, 32, 32, 32);
+    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_N, 64, 256, 512);
+    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_N, 1024, 1024, 1024);
+    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 2048, 2048, 2048);
+    syntheticTest(CUBLAS_OP_N, CUBLAS_OP_T, 2048, 4096, 2048);
 }

@@ -1,26 +1,10 @@
 #include "common_header.h"
-
-#define TILE_SIZE 16
+#define TILE_SIZE 32
 #define TILE_M TILE_SIZE
 #define TILE_N TILE_SIZE
-#define TILE_K TILE_SIZE
+#define SELECTED_KERNEL myDgemmKernel_opt_32x32
 
-
-__device__ inline void printmatrix(const double* mat_a_shared_tile) {
-    __syncthreads();
-    if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
-        for (int mm = 0; mm < TILE_M; mm++) {
-            for (int kk = 0; kk < TILE_K; kk++) {
-                printf("%.2lf\t", mat_a_shared_tile[mm * TILE_M + kk]);
-            }
-            printf("\n");
-        }
-        printf("=====\n");
-    }
-    __syncthreads();
-}
-
-__global__ void myDgemmKernel_opt(
+__global__ void myDgemmKernel_opt_shared_mem_swizzling(
     cublasOperation_t transa, cublasOperation_t transb,
     int m, int n, int k,
     const double alpha,
@@ -31,7 +15,7 @@ __global__ void myDgemmKernel_opt(
 {
     __shared__ double mat_a_shared_tile[TILE_SIZE * TILE_SIZE];
     __shared__ double mat_b_shared_tile[TILE_SIZE * TILE_SIZE];
-    
+
     // get initial result value from global mem
     int m_read_offset = blockIdx.x * TILE_SIZE + threadIdx.x;
     int n_read_offset = blockIdx.y * TILE_SIZE + threadIdx.y;
@@ -46,12 +30,10 @@ __global__ void myDgemmKernel_opt(
         int mat_b_shared_write_offset = threadIdx.y * TILE_SIZE + threadIdx.x;
 
         // matrix A&B read offsets for global memory
-        int mat_a_global_read_offset = transb == CUBLAS_OP_T ?
-            k_iter_base_offset + blockIdx.x * TILE_SIZE * lda + threadIdx.x * lda + threadIdx.y :
-            k_iter_base_offset * lda + blockIdx.x * TILE_SIZE + threadIdx.x * lda + threadIdx.y;
-        int mat_b_global_read_offset = transb == CUBLAS_OP_T ?
-            k_iter_base_offset * ldb + blockIdx.y * TILE_SIZE + threadIdx.y * ldb + threadIdx.x :
-            k_iter_base_offset + blockIdx.y * TILE_SIZE * ldb + threadIdx.y * ldb + threadIdx.x;
+        int mat_a_global_read_offset =
+            (k_iter_base_offset + threadIdx.x) * lda + (blockIdx.x * TILE_SIZE + threadIdx.y);
+        int mat_b_global_read_offset =
+            (k_iter_base_offset + threadIdx.x) * ldb + (blockIdx.y * TILE_SIZE + threadIdx.y);
 
         // copy global mem tiles to shared mem
         mat_a_shared_tile[mat_a_shared_write_offset] = A[mat_a_global_read_offset];
@@ -62,13 +44,13 @@ __global__ void myDgemmKernel_opt(
 
         // dot product loop
 #pragma unroll
-        for (int dp_iter = 0; dp_iter < TILE_K; dp_iter++) {
+        for (int dp_iter = 0; dp_iter < TILE_SIZE; dp_iter++) {
             int mat_a_read_offset = transa == CUBLAS_OP_T ?
-                threadIdx.x * TILE_N + dp_iter :
-                threadIdx.x + TILE_N * dp_iter;
+                threadIdx.x * TILE_SIZE + dp_iter :
+                threadIdx.x + TILE_SIZE * dp_iter;
             int mat_b_read_offset = transb == CUBLAS_OP_T ?
-                threadIdx.y + TILE_M * dp_iter :
-                threadIdx.y * TILE_M + dp_iter;
+                threadIdx.y * TILE_SIZE + dp_iter :
+                threadIdx.y + TILE_SIZE * dp_iter;
             result += alpha * mat_a_shared_tile[mat_a_read_offset] * mat_b_shared_tile[mat_b_read_offset];
         }
 
@@ -79,7 +61,63 @@ __global__ void myDgemmKernel_opt(
     C[mat_c_write_offset] = result;
 }
 
-__global__ void myDgemmKernel_opt2(
+__global__ void myDgemmKernel_32x32_shared_mem(
+    cublasOperation_t transa, cublasOperation_t transb,
+    int m, int n, int k,
+    const double alpha,
+    const double* A, int lda,
+    const double* B, int ldb,
+    const double beta,
+    double* C, int ldc)
+{
+    __shared__ double mat_a_shared_tile[TILE_SIZE * TILE_SIZE];
+    __shared__ double mat_b_shared_tile[TILE_SIZE * TILE_SIZE];
+
+    // get initial result value from global mem
+    int m_read_offset = blockIdx.x * TILE_SIZE + threadIdx.x;
+    int n_read_offset = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int mat_c_write_offset = m_read_offset + n_read_offset * ldc;
+    double result = C[mat_c_write_offset] * beta;
+
+    for (int k_iter = 0; k_iter < k / TILE_SIZE; k_iter++) {
+        int k_iter_base_offset = k_iter * TILE_SIZE;
+
+        // matrix A&B write offsets for shared memory
+        int mat_a_shared_write_offset = threadIdx.x * TILE_SIZE + threadIdx.y;
+        int mat_b_shared_write_offset = threadIdx.y * TILE_SIZE + threadIdx.x;
+
+        // matrix A&B read offsets for global memory
+        int mat_a_global_read_offset = transa == CUBLAS_OP_T ?
+            (k_iter_base_offset + threadIdx.x) + lda * (blockIdx.x * TILE_SIZE + threadIdx.y) :
+            (k_iter_base_offset + threadIdx.x) * lda + (blockIdx.x * TILE_SIZE + threadIdx.y);
+        int mat_b_global_read_offset = transb == CUBLAS_OP_T ?
+            (k_iter_base_offset + threadIdx.x) * ldb + (blockIdx.y * TILE_SIZE + threadIdx.y) :
+            (k_iter_base_offset + threadIdx.x) + ldb * (blockIdx.y * TILE_SIZE + threadIdx.y);
+
+        // copy global mem tiles to shared mem
+        mat_a_shared_tile[mat_a_shared_write_offset] = A[mat_a_global_read_offset];
+        mat_b_shared_tile[mat_b_shared_write_offset] = B[mat_b_global_read_offset];
+
+        // sync after copy
+        __syncthreads();
+
+        // dot product loop
+#pragma unroll
+        for (int dp_iter = 0; dp_iter < TILE_SIZE; dp_iter++) {
+            int mat_a_read_offset = threadIdx.x + TILE_SIZE * dp_iter;
+            int mat_b_read_offset = threadIdx.y * TILE_SIZE + dp_iter;
+            result += alpha * mat_a_shared_tile[mat_a_read_offset] * mat_b_shared_tile[mat_b_read_offset];
+        }
+
+        // sync to make sure shared mem can be overwritten
+        __syncthreads();
+    }
+    // save result to global mem
+    C[mat_c_write_offset] = result;
+}
+
+
+__global__ void myDgemmKernel_opt_32x32(
     cublasOperation_t transa, cublasOperation_t transb,
     int m, int n, int k,
     const double alpha,
@@ -185,7 +223,7 @@ cudaReturnValue myDgemmHostCodeOpt(
     // start time measurement
     t = clock();
     // Launch a kernel on the GPU with one thread for each element.
-    myDgemmKernel_opt << <numBlocks, threadsPerBlock >> > (
+    SELECTED_KERNEL << <numBlocks, threadsPerBlock >> > (
         transa, transb,
         m, n, k,
         *alpha,
